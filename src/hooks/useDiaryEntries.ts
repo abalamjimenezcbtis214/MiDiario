@@ -4,6 +4,8 @@ import type {
   DiaryEntry,
   DiaryEntryInsert,
   DiaryEntryUpdate,
+  DiaryEntryWithTags,
+  Tag,
 } from "@/lib/supabase/database.types";
 import { toEntryDateString } from "@/lib/diary/entryUtils";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,9 +29,48 @@ type MutationResult<T> = {
   data: T | null;
 };
 
+type EntryTagLinkRow = {
+  entry_id: string;
+  tags: Tag | null;
+};
+
+async function fetchTagsByEntryId(): Promise<Map<string, Tag[]>> {
+  const { data, error } = await getSupabase()
+    .from("diary_entry_tags")
+    .select("entry_id, tags(*)");
+
+  const map = new Map<string, Tag[]>();
+
+  if (error || !data) {
+    return map;
+  }
+
+  for (const row of data as EntryTagLinkRow[]) {
+    if (!row.tags) continue;
+
+    const existing = map.get(row.entry_id) ?? [];
+    if (!existing.some((tag) => tag.id === row.tags!.id)) {
+      existing.push(row.tags);
+      map.set(row.entry_id, existing);
+    }
+  }
+
+  return map;
+}
+
+function attachTagsToEntries(
+  entries: DiaryEntry[],
+  tagsByEntryId: Map<string, Tag[]>,
+): DiaryEntryWithTags[] {
+  return entries.map((entry) => ({
+    ...entry,
+    tags: tagsByEntryId.get(entry.id) ?? [],
+  }));
+}
+
 export function useDiaryEntries() {
   const { user } = useAuth();
-  const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [entries, setEntries] = useState<DiaryEntryWithTags[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,16 +95,66 @@ export function useDiaryEntries() {
     if (fetchError) {
       setError(fetchError.message);
       setEntries([]);
-    } else {
-      setEntries(data ?? []);
+      setLoading(false);
+      return;
     }
 
+    const tagsByEntryId = await fetchTagsByEntryId();
+    setEntries(attachTagsToEntries(data ?? [], tagsByEntryId));
     setLoading(false);
   }, [user]);
 
   useEffect(() => {
     void refreshEntries();
   }, [refreshEntries]);
+
+  const getTagsForEntry = useCallback(
+    (entryId: string): Tag[] => {
+      return entries.find((entry) => entry.id === entryId)?.tags ?? [];
+    },
+    [entries],
+  );
+
+  const setEntryTags = useCallback(
+    async (entryId: string, tagIds: string[]): Promise<MutationResult<null>> => {
+      if (!user) {
+        return { error: "No hay sesión activa.", data: null };
+      }
+
+      const uniqueTagIds = [...new Set(tagIds)];
+
+      const { error: deleteError } = await getSupabase()
+        .from("diary_entry_tags")
+        .delete()
+        .eq("entry_id", entryId);
+
+      if (deleteError) {
+        return { error: deleteError.message, data: null };
+      }
+
+      if (uniqueTagIds.length > 0) {
+        const rows = uniqueTagIds.map((tagId) => ({
+          entry_id: entryId,
+          tag_id: tagId,
+        }));
+
+        const { error: insertError } = await getSupabase()
+          .from("diary_entry_tags")
+          .insert(rows);
+
+        if (insertError) {
+          return {
+            error: `No se pudieron asociar las etiquetas: ${insertError.message}`,
+            data: null,
+          };
+        }
+      }
+
+      await refreshEntries();
+      return { error: null, data: null };
+    },
+    [user, refreshEntries],
+  );
 
   const createEntry = useCallback(
     async (input: CreateEntryInput): Promise<MutationResult<DiaryEntry>> => {
@@ -156,6 +247,8 @@ export function useDiaryEntries() {
     loading,
     error,
     refreshEntries,
+    getTagsForEntry,
+    setEntryTags,
     createEntry,
     updateEntry,
     deleteEntry,

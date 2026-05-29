@@ -66,6 +66,51 @@ export interface Database {
         };
         Relationships: [];
       };
+      tags: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          color: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          color?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          color?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      diary_entry_tags: {
+        Row: {
+          entry_id: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: {
+          entry_id: string;
+          tag_id: string;
+          created_at?: string;
+        };
+        Update: {
+          entry_id?: string;
+          tag_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -83,3 +128,16 @@ export type DiaryEntryInsert =
   Database["public"]["Tables"]["diary_entries"]["Insert"];
 export type DiaryEntryUpdate =
   Database["public"]["Tables"]["diary_entries"]["Update"];
+
+export type Tag = Database["public"]["Tables"]["tags"]["Row"];
+export type TagInsert = Database["public"]["Tables"]["tags"]["Insert"];
+export type TagUpdate = Database["public"]["Tables"]["tags"]["Update"];
+
+export type DiaryEntryTag =
+  Database["public"]["Tables"]["diary_entry_tags"]["Row"];
+export type DiaryEntryTagInsert =
+  Database["public"]["Tables"]["diary_entry_tags"]["Insert"];
+
+export type DiaryEntryWithTags = DiaryEntry & {
+  tags: Tag[];
+};

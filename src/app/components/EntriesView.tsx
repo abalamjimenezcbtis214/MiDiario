@@ -3,20 +3,24 @@ import {
   ArrowLeft,
   Loader2,
   Pencil,
+  Plus,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
+import { EntryTagChips } from "./EntryTagChips";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { useDiaryEntries } from "@/hooks/useDiaryEntries";
+import { useTags } from "@/hooks/useTags";
 import {
   DIARY_MOODS,
   getMoodLabel,
   toEntryDateString,
   withDisplayFields,
-  type DiaryEntryWithDisplay,
 } from "@/lib/diary/entryUtils";
-import type { DiaryEntry } from "@/lib/supabase/database.types";
+import { findTagByName, normalizeTagName } from "@/lib/diary/tagUtils";
+import type { DiaryEntryWithTags, Tag } from "@/lib/supabase/database.types";
 
 interface EntriesViewProps {
   onNavigate: (view: string) => void;
@@ -34,27 +38,50 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
     createEntry,
     updateEntry,
     deleteEntry,
+    setEntryTags,
   } = useDiaryEntries();
 
+  const { tags: allTags, getOrCreateTag } = useTags();
+
   const displayEntries = useMemo(
-    () => entries.map(withDisplayFields),
+    () =>
+      entries.map((entry) => ({
+        ...withDisplayFields(entry),
+        tags: entry.tags,
+      })),
     [entries],
   );
 
   const [isCreating, setIsCreating] = useState(false);
-  const [expandedEntry, setExpandedEntry] = useState<DiaryEntry | null>(null);
-  const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);
+  const [expandedEntry, setExpandedEntry] = useState<DiaryEntryWithTags | null>(
+    null,
+  );
+  const [editingEntry, setEditingEntry] = useState<DiaryEntryWithTags | null>(
+    null,
+  );
   const [selectedMood, setSelectedMood] = useState("");
   const [entryDate, setEntryDate] = useState(() => toEntryDateString());
   const [entryText, setEntryText] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const selectedTags = useMemo(
+    () =>
+      selectedTagIds
+        .map((id) => allTags.find((tag) => tag.id === id))
+        .filter((tag): tag is Tag => Boolean(tag)),
+    [selectedTagIds, allTags],
+  );
 
   const resetForm = () => {
     setSelectedMood("");
     setEntryDate(toEntryDateString());
     setEntryText("");
+    setSelectedTagIds([]);
+    setNewTagInput("");
     setFormError(null);
   };
 
@@ -70,19 +97,64 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
     setIsCreating(false);
   };
 
-  const openEdit = (entry: DiaryEntry) => {
+  const openEdit = (entry: DiaryEntryWithTags) => {
     setExpandedEntry(null);
     setIsCreating(false);
     setEditingEntry(entry);
     setSelectedMood(entry.mood);
     setEntryDate(entry.entry_date);
     setEntryText(entry.content);
+    setSelectedTagIds(entry.tags.map((tag) => tag.id));
+    setNewTagInput("");
     setFormError(null);
   };
 
   const closeEdit = () => {
     resetForm();
     setEditingEntry(null);
+  };
+
+  const toggleTagSelection = (tagId: string) => {
+    setSelectedTagIds((current) =>
+      current.includes(tagId)
+        ? current.filter((id) => id !== tagId)
+        : [...current, tagId],
+    );
+  };
+
+  const removeSelectedTag = (tagId: string) => {
+    setSelectedTagIds((current) => current.filter((id) => id !== tagId));
+  };
+
+  const handleAddNewTag = async () => {
+    const trimmed = newTagInput.trim();
+    if (!trimmed) {
+      setFormError("Escribe un nombre para la etiqueta.");
+      return;
+    }
+
+    if (
+      findTagByName(selectedTags, trimmed) ||
+      selectedTagIds.some((id) => {
+        const tag = allTags.find((item) => item.id === id);
+        return tag && normalizeTagName(tag.name) === normalizeTagName(trimmed);
+      })
+    ) {
+      setFormError("Esa etiqueta ya está seleccionada.");
+      return;
+    }
+
+    const result = await getOrCreateTag(trimmed);
+    if (result.error || !result.data) {
+      setFormError(result.error ?? "No se pudo crear la etiqueta.");
+      return;
+    }
+
+    setSelectedTagIds((current) =>
+      current.includes(result.data!.id) ? current : [...current, result.data!.id],
+    );
+    setNewTagInput("");
+    setFormError(null);
   };
 
   const validateForm = (): boolean => {
@@ -112,13 +184,25 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       content: entryText,
       entry_date: entryDate,
     });
-    setSaving(false);
 
-    if (result.error) {
-      setFormError(result.error);
+    if (result.error || !result.data) {
+      setSaving(false);
+      setFormError(result.error ?? "No se pudo crear la entrada.");
       return;
     }
 
+    if (selectedTagIds.length > 0) {
+      const tagResult = await setEntryTags(result.data.id, selectedTagIds);
+      if (tagResult.error) {
+        setSaving(false);
+        setFormError(
+          `Entrada guardada, pero las etiquetas fallaron: ${tagResult.error}`,
+        );
+        return;
+      }
+    }
+
+    setSaving(false);
     resetForm();
     setIsCreating(false);
   };
@@ -133,17 +217,27 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       content: entryText,
       entry_date: entryDate,
     });
-    setSaving(false);
 
     if (result.error) {
+      setSaving(false);
       setFormError(result.error);
+      return;
+    }
+
+    const tagResult = await setEntryTags(editingEntry.id, selectedTagIds);
+    setSaving(false);
+
+    if (tagResult.error) {
+      setFormError(
+        `Entrada actualizada, pero las etiquetas fallaron: ${tagResult.error}`,
+      );
       return;
     }
 
     closeEdit();
   };
 
-  const handleDelete = async (entry: DiaryEntry) => {
+  const handleDelete = async (entry: DiaryEntryWithTags) => {
     const confirmed = window.confirm(
       "¿Seguro que quieres borrar esta entrada? No se puede deshacer.",
     );
@@ -189,6 +283,93 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
     </div>
   );
 
+  const renderTagPicker = () => (
+    <div className="mb-6">
+      <label className="block mb-3 text-foreground">Etiquetas</label>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Input
+          value={newTagInput}
+          onChange={(e) => setNewTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void handleAddNewTag();
+            }
+          }}
+          placeholder="Nueva etiqueta..."
+          disabled={saving}
+          className="h-10 flex-1 min-w-[140px] bg-white/80 border-2 border-[#c9a6d4]/20 rounded-2xl"
+        />
+        <button
+          type="button"
+          onClick={() => void handleAddNewTag()}
+          disabled={saving}
+          className="inline-flex items-center gap-1 px-4 py-2 rounded-2xl border-2 border-[#c9a6d4]/30 bg-[#f5e8ec]/50 hover:bg-[#f5e8ec] text-sm transition-all disabled:opacity-60"
+        >
+          <Plus className="w-4 h-4 text-[#c9a6d4]" />
+          Agregar
+        </button>
+      </div>
+
+      {selectedTags.length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs text-muted-foreground mb-2">Seleccionadas</p>
+          <div className="flex flex-wrap gap-2">
+            {selectedTags.map((tag) => {
+              const color = tag.color ?? "#c9a6d4";
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => removeSelectedTag(tag.id)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border-2 transition-all"
+                  style={{
+                    borderColor: color,
+                    backgroundColor: `${color}30`,
+                  }}
+                >
+                  {tag.name}
+                  <X className="w-3 h-3" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {allTags.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Tus etiquetas</p>
+          <div className="flex flex-wrap gap-2">
+            {allTags.map((tag) => {
+              const isSelected = selectedTagIds.includes(tag.id);
+              const color = tag.color ?? "#c9a6d4";
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTagSelection(tag.id)}
+                  disabled={saving}
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs border-2 transition-all ${
+                    isSelected ? "scale-105" : "opacity-80 hover:opacity-100"
+                  }`}
+                  style={{
+                    borderColor: color,
+                    backgroundColor: isSelected ? `${color}30` : `${color}15`,
+                  }}
+                >
+                  {tag.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const renderEntryForm = (
     title: string,
     onBack: () => void,
@@ -206,7 +387,9 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       </button>
 
       <div className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 border-2 border-[#c9a6d4]/30 shadow-lg relative">
-        <div className="absolute top-6 right-6 text-4xl">🌸</div>
+        <div className="absolute top-6 right-6 text-4xl pointer-events-none select-none">
+          🌸
+        </div>
 
         <h2
           className="text-4xl mb-6"
@@ -218,10 +401,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
         {renderMoodPicker()}
 
         <div className="mb-6">
-          <label
-            htmlFor="entry-date"
-            className="block mb-3 text-foreground"
-          >
+          <label htmlFor="entry-date" className="block mb-3 text-foreground">
             Fecha de la entrada
           </label>
           <Input
@@ -233,6 +413,8 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
             className="h-11 bg-white/80 border-2 border-[#c9a6d4]/20 rounded-2xl focus-visible:border-[#c9a6d4] max-w-xs"
           />
         </div>
+
+        {renderTagPicker()}
 
         <div className="mb-6">
           <label className="block mb-3 text-foreground">
@@ -271,7 +453,9 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
           {saving ? "Guardando..." : saveLabel}
         </button>
 
-        <div className="absolute bottom-6 right-8 text-6xl opacity-10">✨</div>
+        <div className="absolute bottom-6 right-8 text-6xl opacity-10 pointer-events-none">
+          ✨
+        </div>
       </div>
     </div>
   );
@@ -308,9 +492,11 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
         </button>
 
         <div className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 border-2 border-[#c9a6d4]/30 shadow-lg relative">
-          <div className="absolute top-6 right-6 text-4xl">🦋</div>
+          <div className="absolute top-6 right-6 text-4xl pointer-events-none">
+            🦋
+          </div>
 
-          <div className="flex items-start gap-4 mb-6">
+          <div className="flex items-start gap-4 mb-4">
             <div className="w-16 h-16 bg-gradient-to-br from-[#c9a6d4] to-[#f5c4d0] rounded-full flex items-center justify-center text-4xl shrink-0">
               {detail.mood}
             </div>
@@ -328,6 +514,8 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
               )}
             </div>
           </div>
+
+          <EntryTagChips tags={expandedEntry.tags} className="mb-6" />
 
           <p className="text-foreground leading-relaxed whitespace-pre-wrap">
             {detail.content}
@@ -428,12 +616,12 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
 
       {!loading && displayEntries.length > 0 && (
         <div className="space-y-4">
-          {displayEntries.map((entry: DiaryEntryWithDisplay, index) => (
+          {displayEntries.map((entry, index) => (
             <div
               key={entry.id}
               className="bg-white/70 backdrop-blur-sm rounded-3xl p-6 border-2 border-[#c9a6d4]/20 shadow-md hover:shadow-lg transition-all group relative overflow-hidden"
             >
-              <div className="absolute top-4 right-4 text-3xl">
+              <div className="absolute top-4 right-4 text-3xl pointer-events-none">
                 {LIST_DECORATIONS[index % LIST_DECORATIONS.length]}
               </div>
 
@@ -452,6 +640,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
                   >
                     {entry.formattedDate}
                   </h3>
+                  <EntryTagChips tags={entry.tags} className="mb-3" />
                   <p className="text-foreground leading-relaxed">
                     {entry.preview}
                   </p>
