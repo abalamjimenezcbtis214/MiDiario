@@ -6,6 +6,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { useDiaryEntries } from "@/hooks/useDiaryEntries";
 import {
@@ -44,6 +45,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
   const [expandedEntry, setExpandedEntry] = useState<DiaryEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);
   const [selectedMood, setSelectedMood] = useState("");
+  const [entryDate, setEntryDate] = useState(() => toEntryDateString());
   const [entryText, setEntryText] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
 
   const resetForm = () => {
     setSelectedMood("");
+    setEntryDate(toEntryDateString());
     setEntryText("");
     setFormError(null);
   };
@@ -72,6 +75,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
     setIsCreating(false);
     setEditingEntry(entry);
     setSelectedMood(entry.mood);
+    setEntryDate(entry.entry_date);
     setEntryText(entry.content);
     setFormError(null);
   };
@@ -84,6 +88,10 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
   const validateForm = (): boolean => {
     if (!selectedMood) {
       setFormError("Selecciona cómo te sientes hoy.");
+      return false;
+    }
+    if (!entryDate.trim()) {
+      setFormError("Selecciona la fecha de la entrada.");
       return false;
     }
     if (!entryText.trim()) {
@@ -102,7 +110,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       mood: selectedMood,
       mood_label: getMoodLabel(selectedMood),
       content: entryText,
-      entry_date: toEntryDateString(),
+      entry_date: entryDate,
     });
     setSaving(false);
 
@@ -123,6 +131,7 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       mood: selectedMood,
       mood_label: getMoodLabel(selectedMood),
       content: entryText,
+      entry_date: entryDate,
     });
     setSaving(false);
 
@@ -207,6 +216,23 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
         </h2>
 
         {renderMoodPicker()}
+
+        <div className="mb-6">
+          <label
+            htmlFor="entry-date"
+            className="block mb-3 text-foreground"
+          >
+            Fecha de la entrada
+          </label>
+          <Input
+            id="entry-date"
+            type="date"
+            value={entryDate}
+            onChange={(e) => setEntryDate(e.target.value)}
+            disabled={saving}
+            className="h-11 bg-white/80 border-2 border-[#c9a6d4]/20 rounded-2xl focus-visible:border-[#c9a6d4] max-w-xs"
+          />
+        </div>
 
         <div className="mb-6">
           <label className="block mb-3 text-foreground">
