@@ -1,4 +1,13 @@
-import { BookHeart, Calendar, User, Info, Menu, X, LogOut } from "lucide-react";
+import {
+  BarChart3,
+  BookHeart,
+  Calendar,
+  User,
+  Info,
+  Menu,
+  X,
+  LogOut,
+} from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -23,6 +32,7 @@ export function Navigation({ activeView, onNavigate }: NavigationProps) {
     { id: "home", label: "Inicio", icon: BookHeart },
     { id: "entries", label: "Entradas", icon: BookHeart },
     { id: "calendar", label: "Calendario", icon: Calendar },
+    { id: "analytics", label: "Moods", icon: BarChart3 },
     { id: "profile", label: "Perfil", icon: User },
     { id: "about", label: "Sobre nosotros", icon: Info },
   ];

@@ -7,6 +7,7 @@ import { HomeView } from "./components/HomeView";
 import { EntriesView } from "./components/EntriesView";
 import { CalendarView } from "./components/CalendarView";
 import { ProfileView } from "./components/ProfileView";
+import { MoodAnalyticsView } from "./components/MoodAnalyticsView";
 import { AboutView } from "./components/AboutView";
 
 export default function App() {
@@ -31,6 +32,8 @@ export default function App() {
         return <CalendarView />;
       case "profile":
         return <ProfileView />;
+      case "analytics":
+        return <MoodAnalyticsView />;
       case "about":
         return <AboutView />;
       default:

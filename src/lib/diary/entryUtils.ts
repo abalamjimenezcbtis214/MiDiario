@@ -267,3 +267,67 @@ export function formatMemberSince(isoDate: string): string {
   const capitalized = formatted.charAt(0).toUpperCase() + formatted.slice(1);
   return `Miembro desde ${capitalized}`;
 }
+
+export type MoodAnalyticsItem = {
+  mood: string;
+  moodLabel: string;
+  count: number;
+  percentage: number;
+  color: string;
+};
+
+export type MoodAnalytics = {
+  totalEntries: number;
+  topMood: MoodAnalyticsItem | null;
+  items: MoodAnalyticsItem[];
+};
+
+export function getMoodAnalytics(entries: DiaryEntry[]): MoodAnalytics {
+  if (entries.length === 0) {
+    return { totalEntries: 0, topMood: null, items: [] };
+  }
+
+  const moodGroups = new Map<
+    string,
+    { count: number; labelCounts: Map<string, number> }
+  >();
+
+  for (const entry of entries) {
+    const group = moodGroups.get(entry.mood) ?? {
+      count: 0,
+      labelCounts: new Map<string, number>(),
+    };
+    group.count += 1;
+    const label = entry.mood_label ?? getMoodLabel(entry.mood) ?? entry.mood;
+    group.labelCounts.set(label, (group.labelCounts.get(label) ?? 0) + 1);
+    moodGroups.set(entry.mood, group);
+  }
+
+  const items: MoodAnalyticsItem[] = Array.from(moodGroups.entries())
+    .map(([mood, group]) => {
+      let moodLabel = getMoodLabel(mood) ?? mood;
+      let maxLabelCount = 0;
+
+      for (const [label, labelCount] of group.labelCounts) {
+        if (labelCount > maxLabelCount) {
+          maxLabelCount = labelCount;
+          moodLabel = label;
+        }
+      }
+
+      return {
+        mood,
+        moodLabel,
+        count: group.count,
+        percentage: Math.round((group.count / entries.length) * 1000) / 10,
+        color: getMoodColor(mood),
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    totalEntries: entries.length,
+    topMood: items[0] ?? null,
+    items,
+  };
+}
