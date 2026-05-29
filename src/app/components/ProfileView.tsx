@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Loader2, Lock, Palette, Save, X } from "lucide-react";
+import { Bell, Download, Loader2, Lock, Palette, Save, X } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useDiaryEntries } from "@/hooks/useDiaryEntries";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/database.types";
+import {
+  downloadTextFile,
+  generateDiaryMarkdown,
+  getDiaryExportFilename,
+} from "@/lib/diary/exportUtils";
 import {
   formatMemberSince,
   getDiaryStats,
@@ -29,6 +34,7 @@ export function ProfileView() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const stats = useMemo(() => getDiaryStats(entries), [entries]);
   const favoriteHour = useMemo(
@@ -147,6 +153,25 @@ export function ProfileView() {
 
   const shownAvatar = profile?.avatar_emoji || "🌸";
   const shownEmail = user?.email ?? "";
+
+  const handleExportDiary = () => {
+    setExportMessage(null);
+
+    if (isLoading) return;
+
+    if (entries.length === 0) {
+      setExportMessage(
+        "Aún no tienes entradas para exportar. Escribe en tu diario primero 💜",
+      );
+      return;
+    }
+
+    const content = generateDiaryMarkdown(entries);
+    downloadTextFile(getDiaryExportFilename(), content);
+    setExportMessage(
+      `Diario exportado (${entries.length} ${entries.length === 1 ? "entrada" : "entradas"}) ✨`,
+    );
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8">
@@ -353,6 +378,37 @@ export function ProfileView() {
             </div>
             <div className="text-sm text-muted-foreground">Hora favorita</div>
           </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-[#c9a6d4]/20 relative z-10">
+          <h4
+            className="text-2xl mb-2"
+            style={{ fontFamily: "var(--font-script)", color: "#c9a6d4" }}
+          >
+            Exportar diario
+          </h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            Descarga todas tus entradas en un archivo Markdown (.md).
+          </p>
+
+          {exportMessage && (
+            <p
+              role="status"
+              className="mb-4 p-3 rounded-2xl bg-[#f5e8ec]/80 border border-[#c9a6d4]/20 text-sm text-foreground"
+            >
+              {exportMessage}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExportDiary}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#c9a6d4] to-[#dfc4e8] text-white rounded-2xl shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+          >
+            <Download className="w-5 h-5" />
+            Exportar diario
+          </button>
         </div>
       </div>
 
