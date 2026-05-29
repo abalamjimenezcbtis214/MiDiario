@@ -5,6 +5,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   toEntryDateString,
   withDisplayFields,
 } from "@/lib/diary/entryUtils";
+import { filterDiaryEntries } from "@/lib/diary/searchUtils";
 import { findTagByName, normalizeTagName } from "@/lib/diary/tagUtils";
 import type { DiaryEntryWithTags, Tag } from "@/lib/supabase/database.types";
 
@@ -51,6 +53,15 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
       })),
     [entries],
   );
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredEntries = useMemo(
+    () => filterDiaryEntries(displayEntries, searchQuery),
+    [displayEntries, searchQuery],
+  );
+
+  const hasSearchQuery = searchQuery.trim().length > 0;
 
   const [isCreating, setIsCreating] = useState(false);
   const [expandedEntry, setExpandedEntry] = useState<DiaryEntryWithTags | null>(
@@ -614,9 +625,43 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
         </div>
       )}
 
-      {!loading && displayEntries.length > 0 && (
+      {!loading && !error && displayEntries.length > 0 && (
+        <>
+          <div className="bg-white/70 backdrop-blur-sm rounded-3xl p-4 border-2 border-[#c9a6d4]/20 shadow-sm">
+            <label htmlFor="entry-search" className="sr-only">
+              Buscar en mi diario
+            </label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#c9a6d4]" />
+              <Input
+                id="entry-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar en mi diario…"
+                className="h-12 pl-12 pr-4 bg-white/80 border-2 border-[#c9a6d4]/20 rounded-2xl focus-visible:border-[#c9a6d4]"
+              />
+            </div>
+          </div>
+
+          {filteredEntries.length === 0 && hasSearchQuery && (
+            <div className="bg-white/70 backdrop-blur-sm rounded-3xl p-10 border-2 border-[#c9a6d4]/20 text-center">
+              <div className="text-5xl mb-4">🔍</div>
+              <p
+                className="text-2xl mb-2"
+                style={{ fontFamily: "var(--font-script)", color: "#c9a6d4" }}
+              >
+                Sin resultados
+              </p>
+              <p className="text-muted-foreground">
+                No encontramos entradas con esa búsqueda.
+              </p>
+            </div>
+          )}
+
+          {filteredEntries.length > 0 && (
         <div className="space-y-4">
-          {displayEntries.map((entry, index) => (
+          {filteredEntries.map((entry, index) => (
             <div
               key={entry.id}
               className="bg-white/70 backdrop-blur-sm rounded-3xl p-6 border-2 border-[#c9a6d4]/20 shadow-md hover:shadow-lg transition-all group relative overflow-hidden"
@@ -682,6 +727,8 @@ export function EntriesView({ onNavigate }: EntriesViewProps) {
             </div>
           ))}
         </div>
+          )}
+        </>
       )}
     </div>
   );
