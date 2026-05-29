@@ -1,5 +1,6 @@
-import { BookHeart, Calendar, User, Info, Menu, X } from "lucide-react";
+import { BookHeart, Calendar, User, Info, Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavigationProps {
   activeView: string;
@@ -7,7 +8,16 @@ interface NavigationProps {
 }
 
 export function Navigation({ activeView, onNavigate }: NavigationProps) {
+  const { signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await signOut();
+    setSigningOut(false);
+    setIsOpen(false);
+  };
 
   const menuItems = [
     { id: "home", label: "Inicio", icon: BookHeart },
@@ -66,6 +76,16 @@ export function Navigation({ activeView, onNavigate }: NavigationProps) {
           );
         })}
       </div>
+
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="mt-6 w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 border-[#f5c4d0]/40 bg-[#f5e8ec]/40 hover:bg-[#f5e8ec] text-foreground transition-all disabled:opacity-60"
+      >
+        <LogOut className="w-5 h-5 text-[#f5c4d0]" />
+        <span>{signingOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+      </button>
 
       <div className="mt-8 p-4 bg-gradient-to-br from-[#f5c4d0]/20 to-[#dfc4e8]/20 rounded-2xl border border-[#c9a6d4]/20">
         <p className="text-sm text-center" style={{ fontFamily: 'var(--font-script)', fontSize: '18px' }}>

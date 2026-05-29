@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { AuthLoadingScreen } from "./components/AuthLoadingScreen";
+import { AuthView } from "./components/AuthView";
 import { Navigation } from "./components/Navigation";
 import { HomeView } from "./components/HomeView";
 import { EntriesView } from "./components/EntriesView";
@@ -7,7 +10,16 @@ import { ProfileView } from "./components/ProfileView";
 import { AboutView } from "./components/AboutView";
 
 export default function App() {
+  const { user, session, loading } = useAuth();
   const [activeView, setActiveView] = useState("home");
+
+  if (loading) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!user || !session) {
+    return <AuthView />;
+  }
 
   const renderView = () => {
     switch (activeView) {
