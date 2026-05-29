@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Download, Loader2, Lock, Palette, Save, X } from "lucide-react";
+import {
+  Bell,
+  FileText,
+  Loader2,
+  Lock,
+  Palette,
+  Printer,
+  Save,
+  X,
+} from "lucide-react";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,6 +16,7 @@ import { useDiaryEntries } from "@/hooks/useDiaryEntries";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/database.types";
 import {
+  downloadDiaryPdf,
   downloadTextFile,
   generateDiaryMarkdown,
   getDiaryExportFilename,
@@ -154,22 +164,46 @@ export function ProfileView() {
   const shownAvatar = profile?.avatar_emoji || "🌸";
   const shownEmail = user?.email ?? "";
 
-  const handleExportDiary = () => {
+  const canExport = () => {
     setExportMessage(null);
 
-    if (isLoading) return;
+    if (isLoading) return false;
 
     if (entries.length === 0) {
       setExportMessage(
         "Aún no tienes entradas para exportar. Escribe en tu diario primero 💜",
       );
-      return;
+      return false;
     }
+
+    return true;
+  };
+
+  const handleExportMarkdown = () => {
+    if (!canExport()) return;
 
     const content = generateDiaryMarkdown(entries);
     downloadTextFile(getDiaryExportFilename(), content);
     setExportMessage(
-      `Diario exportado (${entries.length} ${entries.length === 1 ? "entrada" : "entradas"}) ✨`,
+      `Markdown descargado (${entries.length} ${entries.length === 1 ? "entrada" : "entradas"}) ✨`,
+    );
+  };
+
+  const handleExportPdf = () => {
+    if (!canExport()) return;
+
+    const result = downloadDiaryPdf(entries, {
+      display_name: profile?.display_name,
+      avatar_emoji: profile?.avatar_emoji,
+    });
+
+    if (!result.success) {
+      setExportMessage(result.error ?? "No se pudo exportar el PDF.");
+      return;
+    }
+
+    setExportMessage(
+      "Se abrió la vista de impresión. Elige «Guardar como PDF» en el diálogo ✨",
     );
   };
 
@@ -388,7 +422,8 @@ export function ProfileView() {
             Exportar diario
           </h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Descarga todas tus entradas en un archivo Markdown (.md).
+            Descarga tus entradas en Markdown o abre una vista para guardar como
+            PDF.
           </p>
 
           {exportMessage && (
@@ -400,15 +435,26 @@ export function ProfileView() {
             </p>
           )}
 
-          <button
-            type="button"
-            onClick={handleExportDiary}
-            disabled={isLoading}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#c9a6d4] to-[#dfc4e8] text-white rounded-2xl shadow-md hover:shadow-lg transition-all disabled:opacity-60"
-          >
-            <Download className="w-5 h-5" />
-            Exportar diario
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleExportMarkdown}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#c9a6d4] to-[#dfc4e8] text-white rounded-2xl shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+            >
+              <FileText className="w-5 h-5" />
+              Exportar Markdown
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl border-2 border-[#c9a6d4]/40 bg-white/80 hover:bg-[#f5e8ec] text-foreground shadow-sm hover:shadow-md transition-all disabled:opacity-60"
+            >
+              <Printer className="w-5 h-5 text-[#c9a6d4]" />
+              Exportar PDF
+            </button>
+          </div>
         </div>
       </div>
 
